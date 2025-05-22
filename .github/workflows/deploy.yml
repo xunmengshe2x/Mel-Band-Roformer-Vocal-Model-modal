@@ -1,4 +1,4 @@
-name: Deploy Index-TTS to Modal
+name: Deploy Mel-Band-Roformer-Vocal-Model to Modal
 
 on:
   push:
@@ -19,7 +19,11 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install modal fastapi[standard]  # Install Modal and FastAPI with standard dependencies
+          pip install modal fastapi[standard] python-multipart
+          pip install torch>=2.0.1 numpy pandas soundfile ml_collections tqdm
+          pip install segmentation_models_pytorch==0.3.3 timm==0.9.2 omegaconf==2.2.3
+          pip install beartype==0.14.1 rotary_embedding_torch==0.3.5 einops==0.6.1 librosa
+          pip install pydantic>=2.0.0 typing-extensions PyYAML
 
       - name: Configure Modal
         run: |
@@ -40,10 +44,16 @@ jobs:
 
       - name: Deploy to Modal
         run: |
+          # Rename model_app.py to modal_app.py if needed
+          if [ -f "model_app.py" ] && [ ! -f "modal_app.py" ]; then
+            cp model_app.py modal_app.py
+            echo "Copied model_app.py to modal_app.py for deployment"
+          fi
+          
           # Deploy directly
           modal deploy modal_app.py
 
       - name: Verify deployment
         run: |
           echo "Deployment completed. The service is now available at:"
-          echo "https://${{ secrets.MODAL_USERNAME }}--mel-band-roformer-vocal-model-api.modal.run"
+          echo "https://${{ secrets.MODAL_USERNAME }}--mel-band-roformer-vocal-model.modal.run"
