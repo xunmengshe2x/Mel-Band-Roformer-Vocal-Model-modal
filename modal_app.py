@@ -107,6 +107,12 @@ def process_audio(audio_data, sample_rate):
     import yaml
     from ml_collections import ConfigDict
     import os
+        # Add this near the top of your process_audio function
+    #import os
+    #import sys
+    
+    # Add the current directory to the Python path
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
     
     # Add the repository to the Python path
     sys.path.append(REPO_PATH)
