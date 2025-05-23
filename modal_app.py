@@ -33,6 +33,9 @@ image = modal.Image.debian_slim().pip_install(
     "typing-extensions"
 )
 
+image = image.apt_install("ffmpeg", "wget", "git")
+
+
 # Create a Modal volume to store model files
 volume = modal.Volume.from_name("mel-band-roformer-model", create_if_missing=True)
 
