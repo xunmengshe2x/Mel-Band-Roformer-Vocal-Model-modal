@@ -107,9 +107,6 @@ def process_audio(audio_data, sample_rate):
     import yaml
     from ml_collections import ConfigDict
     import os
-        # Add this near the top of your process_audio function
-    #import os
-    #import sys
     
     # Add the current directory to the Python path
     sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -152,7 +149,7 @@ def process_audio(audio_data, sample_rate):
     # Process audio
     res, _ = demix_track(config, model, mixture, device, None)
     
-    # Extract vocals and create instrumental
+    # Extract vocals
     instruments = config.training.instruments
     if config.training.target_instrument is not None:
         instruments = [config.training.target_instrument]
@@ -161,10 +158,9 @@ def process_audio(audio_data, sample_rate):
     if original_mono:
         vocals_output = vocals_output[:, 0]
     
-    # Create instrumental by subtracting vocals from original
-    instrumental = audio_data - vocals_output
-    
-    return vocals_output, instrumental, sample_rate
+    # Return only vocals output
+    return vocals_output, sample_rate
+
 
 @app.function(
     gpu="T4",  # You can change this to "A10G", "A100", etc. based on your needs
@@ -177,6 +173,7 @@ async def process_audio_file(request: Request):
     import tempfile
     import base64
     import soundfile as sf
+    import os
     
     # Parse the request body
     data = await request.json()
@@ -189,46 +186,44 @@ async def process_audio_file(request: Request):
     download_model_and_repo.remote()
     
     # Create a temporary file for the audio
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
-        temp_file_path = temp_file.name
-        temp_file.write(base64.b64decode(audio_base64))
+    temp_file_path = None
+    vocals_path = None
     
     try:
+        # Create and write to temporary file
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_file:
+            temp_file_path = temp_file.name
+            temp_file.write(base64.b64decode(audio_base64))
+        
         # Read the audio file
         audio_data, sample_rate = sf.read(temp_file_path)
         
-        # Process the audio
-        vocals, instrumental, sr = process_audio.remote(audio_data, sample_rate)
+        # Process the audio - note we now only expect vocals and sample rate
+        vocals, sr = process_audio.remote(audio_data, sample_rate)
         
-        # Save the processed audio to temporary files
+        # Save the processed vocals to a temporary file
         vocals_path = temp_file_path + "_vocals.wav"
-        instrumental_path = temp_file_path + "_instrumental.wav"
-        
         sf.write(vocals_path, vocals, sr, subtype='FLOAT')
-        sf.write(instrumental_path, instrumental, sr, subtype='FLOAT')
         
-        # Read the processed files and encode as base64
+        # Read the processed file and encode as base64
         with open(vocals_path, "rb") as f:
             vocals_data = f.read()
             vocals_base64 = base64.b64encode(vocals_data).decode("utf-8")
         
-        with open(instrumental_path, "rb") as f:
-            instrumental_data = f.read()
-            instrumental_base64 = base64.b64encode(instrumental_data).decode("utf-8")
-        
         return {
-            "vocals_base64": vocals_base64,
-            "instrumental_base64": instrumental_base64
+            "vocals_base64": vocals_base64
         }
+    
+    except Exception as e:
+        print(f"Error processing audio: {e}")
+        return {"error": str(e)}
     
     finally:
         # Clean up temporary files
-        if os.path.exists(temp_file_path):
+        if temp_file_path and os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-        if os.path.exists(vocals_path):
+        if vocals_path and os.path.exists(vocals_path):
             os.remove(vocals_path)
-        if os.path.exists(instrumental_path):
-            os.remove(instrumental_path)
 
 @app.function(
     gpu="T4",  # You can change this to "A10G", "A100", etc. based on your needs
